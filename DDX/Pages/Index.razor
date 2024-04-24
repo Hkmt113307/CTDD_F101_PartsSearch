@@ -1,0 +1,122 @@
+﻿@page "/"
+
+@using System
+@using Npgsql
+
+
+@* 画面タイトル *@
+<h3>部品検索お試し作成</h3>
+
+@* 検索条件入力部＆検索ボタン定義 *@
+<div>
+    <label for="searchInput">製造基準識別コード: </label>
+    <input id="searchInput" @bind="searchKeyword" />
+    <button @onclick="Search">検索</button>
+</div>
+
+
+誰:<font color="red">@dare</font>
+
+
+@* 検索結果表示領域定義 *@
+<table class="table">
+    <thead>
+        <tr>
+            <th>製造基準識別コード</th>
+            <th>REV</th>
+            <th>部品名称</th>
+            <th>４桁分類コード</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var part in Parts)
+        {
+            <tr>
+                <td>@part.Code</td>
+                <td>@part.Rev</td>
+                <td>@part.Partsname</td>
+                <td>@part.YONKETA</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private string searchKeyword = "";
+    public int i = 0;
+    public struct Part
+    {
+        public string Code { get; set; }
+        public string Rev { get; set; }
+        public string Partsname { get; set; }
+        public string YONKETA { get; set; }
+    }
+    public Part[] Parts = new Part[1];
+
+    private string dare = "";
+
+
+    private void Search()
+    {
+        var environmentVariables = Environment.GetEnvironmentVariables();
+        string environmentVariableName = "USERNAME";
+
+        // 環境変数の値を取得してローカル変数に代入
+        dare = Environment.GetEnvironmentVariable(environmentVariableName);
+
+
+
+        // 環境変数をコンソールに出力
+        //        foreach (var key in environmentVariables.Keys)
+        //        {
+        //            Console.WriteLine($"{key} = {environmentVariables[key]}");
+        //        }
+
+
+        try
+        {
+
+            // PostgreSQLの接続情報
+            var connectionString = "Host=bot001-0z0308.jp.ykgw.net;Username=ddx;Password=ddx123;Database=postgres";
+            using (var connection = new NpgsqlConnection(connectionString))
+            {
+
+                // データベースに接続
+                connection.Open();
+
+                // SELECTクエリの作成
+                // 検索条件で入力された文字を部品番号として（後方ワイルドカード）でPARTSとPMSから検索するSQL
+                var sql = $"SELECT PM.CODE AS CODE, PM.REV AS REV, P.PARTSNAME AS PARTSNAME, P.FOUR_DIGIT_CODE AS YONKETA FROM PARTS P, PMS PM WHERE " +
+                        $"P.CODE = PM.CODE AND PM.LATEST = '1' AND P.LATEST = '1' AND PM.SUBCODE = 'PRT' AND P.CODE LIKE '{searchKeyword}%'";
+
+                // NpgsqlCommandオブジェクトを作成
+                using (var cmd = new NpgsqlCommand(sql, connection))
+                {
+                    // NpgsqlDataReaderオブジェクトを作成してデータを読み取る
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        Array.Resize(ref Parts, 1);
+                        i = 0;
+                        while (reader.Read())
+                        {
+                            Parts[i].Code = reader["CODE"].ToString();
+                            Parts[i].Rev = reader["REV"].ToString();
+                            Parts[i].Partsname = reader["PARTSNAME"].ToString();
+                            Parts[i].YONKETA = reader["YONKETA"].ToString();
+                            i++;
+                            Array.Resize(ref Parts, i + 1);  // 1行づつ読み取る度に構造体配列を増やす
+                        }
+                    }
+                }
+                // データベース切断
+                connection.Close();
+
+            }
+        }
+        catch (Exception ex)
+        {
+            // エラーハンドリング
+            Console.WriteLine(ex.Message);
+        }
+    }
+}
